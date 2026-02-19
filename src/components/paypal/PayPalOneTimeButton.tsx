@@ -13,7 +13,7 @@ type Props = {
 export default function PayPalOneTimeButton({ amount, onSuccess, onError }: Props) {
     const [ready, setReady] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
-    const containerId = "paypal-button-container-P-1BU036838K3528252NGLD27Q";
+    const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
 
     useEffect(() => {
         if (!ready || !containerRef.current || !(window as any).paypal) return;
@@ -23,16 +23,24 @@ export default function PayPalOneTimeButton({ amount, onSuccess, onError }: Prop
                 shape: "rect",
                 color: "gold",
                 layout: "vertical",
-                label: "subscribe",
+                label: "pay",
             },
-            createSubscription: (_data: any, actions: any) => {
-                return actions.subscription.create({
-                    plan_id: "P-1BU036838K3528252NGLD27Q",
+            createOrder: (_data: any, actions: any) => {
+                return actions.order.create({
+                    purchase_units: [
+                        {
+                            amount: {
+                                value: amount.toString(),
+                                currency_code: "EUR",
+                            },
+                            description: "Property Reservation Fee",
+                        },
+                    ],
                 });
             },
-            onApprove: async (data: any) => {
-                alert(data.subscriptionID);
-                onSuccess({ id: data.subscriptionID });
+            onApprove: async (_data: any, actions: any) => {
+                const details = await actions.order.capture();
+                onSuccess(details);
             },
             onError: (err: any) => {
                 console.error("PayPal Error:", err);
@@ -40,22 +48,23 @@ export default function PayPalOneTimeButton({ amount, onSuccess, onError }: Prop
             },
         });
 
-        buttons.render(`#${containerId}`);
+        buttons.render(containerRef.current);
 
         return () => {
             buttons.close?.();
             if (containerRef.current) containerRef.current.innerHTML = "";
         };
-    }, [ready, amount, onSuccess, onError, containerId]);
+    }, [ready, amount, onSuccess, onError]);
+
+    if (!clientId) return <p>Missing PayPal Client ID</p>;
 
     return (
         <>
             <Script
-                src="https://www.paypal.com/sdk/js?client-id=AU1V0qOiwlrGbz1ht2OI_UIpFLYC6Iv8-35UM0aHjkOxn3yY4YkXGMAviv79wrOmy62dgP6BiAX26HH6&vault=true&intent=subscription"
-                data-sdk-integration-source="button-factory"
+                src={`https://www.paypal.com/sdk/js?client-id=${clientId}&currency=EUR&components=buttons&intent=capture`}
                 onLoad={() => setReady(true)}
             />
-            <div id={containerId} ref={containerRef} className="z-0 relative" />
+            <div ref={containerRef} className="z-0 relative" />
         </>
     );
 }
